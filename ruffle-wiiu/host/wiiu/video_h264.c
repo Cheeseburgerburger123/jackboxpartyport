@@ -18,6 +18,7 @@ typedef struct {
     uint32_t fb_size;
     uint8_t* stream;
     uint32_t stream_size;
+    uint32_t mem_size;
     uint32_t w, h;
     // the last frame the decoder gave
     uint8_t* out;
@@ -88,6 +89,54 @@ static void on_output(H264DecodeOutput* output) {
     d->out_line = r->nextLine;
 }
 
+// A closed decoder's memory is kept for the next one: big blocks are hard to get back once the game has
+// spread its own allocations over the heap (Jackbox: the second video ran out of memory, every time).
+#define KEPT_BLOCKS 2
+static void* g_kept[KEPT_BLOCKS];
+static uint32_t g_kept_size[KEPT_BLOCKS];
+
+static void keep_memory(void* p, uint32_t size) {
+    int smallest = 0;
+    for (int i = 0; i < KEPT_BLOCKS; i++) {
+        if (!g_kept[i]) {
+            g_kept[i] = p;
+            g_kept_size[i] = size;
+            return;
+        }
+        if (g_kept_size[i] < g_kept_size[smallest]) smallest = i;
+    }
+    if (size > g_kept_size[smallest]) {
+        free(g_kept[smallest]);
+        g_kept[smallest] = p;
+        g_kept_size[smallest] = size;
+    } else {
+        free(p);
+    }
+}
+
+// The smallest kept block of at least `size` bytes (and its real size), or NULL.
+static void* take_kept_memory(uint32_t size, uint32_t* got) {
+    int best = -1;
+    for (int i = 0; i < KEPT_BLOCKS; i++)
+        if (g_kept[i] && g_kept_size[i] >= size && (best < 0 || g_kept_size[i] < g_kept_size[best])) best = i;
+    if (best < 0) return NULL;
+    void* p = g_kept[best];
+    *got = g_kept_size[best];
+    g_kept[best] = NULL;
+    g_kept_size[best] = 0;
+    return p;
+}
+
+// The lowest H.264 level whose frame size limit fits w x h: the decoder's memory is sized for the level's
+// largest pictures, so 4.2 for every video asked ~39 MB even for 640x360 (level 3.0 covers that).
+static int level_for(uint32_t w, uint32_t h) {
+    uint32_t mbs = ((w + 15) / 16) * ((h + 15) / 16);
+    if (mbs <= 1620) return 30;
+    if (mbs <= 3600) return 31;
+    if (mbs <= 5120) return 32;
+    return 42;
+}
+
 static void close_decoder(Decoder* d) {
     if (!d->used) return;
     if (g_decoder_stuck) { // it may still be using its memory
@@ -97,7 +146,7 @@ static void close_decoder(Decoder* d) {
     H264DECFlush(d->mem);
     H264DECEnd(d->mem);
     H264DECClose(d->mem);
-    free(d->mem);
+    keep_memory(d->mem, d->mem_size);
     free(d->fb);
     free(d->stream);
     memset(d, 0, sizeof(*d));
@@ -142,7 +191,8 @@ uint32_t gfx_h264_open(uint32_t w, uint32_t h) {
     uint32_t aw = (w + 15) & ~15u, ah = (h + 15) & ~15u, size = 0;
     // (Level 4.2 covers 1080p. The memory comes from malloc: the system heap has little left, and the console
     // ran out there on a 256x192 video.)
-    H264Error e = H264DECMemoryRequirement(100, 42, (int32_t)aw, (int32_t)ah, &size);
+    int level = level_for(w, h);
+    H264Error e = H264DECMemoryRequirement(100, level, (int32_t)aw, (int32_t)ah, &size);
     char m[120];
     if (e != H264_ERROR_OK || !size) {
         snprintf(m, sizeof(m), "H.264: no decoder for %ux%u (error %x)", (unsigned)w, (unsigned)h, (unsigned)e);
@@ -151,18 +201,33 @@ uint32_t gfx_h264_open(uint32_t w, uint32_t h) {
     }
     uint32_t pitch = (aw + 255) & ~255u;
     d->fb_size = pitch * ah * 3 / 2;
-    d->mem = alloc_decoder_memory(size);
+    uint32_t mem_size = size;
+    d->mem = take_kept_memory(size, &mem_size);
+    if (!d->mem) {
+        d->mem = alloc_decoder_memory(size);
+        mem_size = size;
+    }
+    if (!d->mem) { // the kept blocks were all too small: give them back and try once more
+        for (int i = 0; i < KEPT_BLOCKS; i++) {
+            free(g_kept[i]);
+            g_kept[i] = NULL;
+            g_kept_size[i] = 0;
+        }
+        d->mem = alloc_decoder_memory(size);
+    }
+    d->mem_size = mem_size;
     d->fb = (uint8_t*)memalign(0x100, d->fb_size);
     if (!d->mem || !d->fb) {
         snprintf(m, sizeof(m), "H.264: out of memory for %ux%u (decoder %u KB%s, picture %u KB%s)", (unsigned)w, (unsigned)h,
                  (unsigned)(size >> 10), d->mem ? "" : " failed", (unsigned)(d->fb_size >> 10), d->fb ? "" : " failed");
         plat_log(1, m);
-        free(d->mem);
+        if (d->mem) keep_memory(d->mem, d->mem_size);
         free(d->fb);
         memset(d, 0, sizeof(*d));
         return 0;
     }
-    snprintf(m, sizeof(m), "H.264: decoder for %ux%u, %u KB", (unsigned)w, (unsigned)h, (unsigned)(size >> 10));
+    snprintf(m, sizeof(m), "H.264: decoder for %ux%u (level %d.%d), %u KB", (unsigned)w, (unsigned)h, level / 10, level % 10,
+             (unsigned)(size >> 10));
     plat_log(2, m);
     OSSleepTicks(OSMillisecondsToTicks(100)); // lets the log thread save that, in case the decoder never comes back
     d->w = w;
