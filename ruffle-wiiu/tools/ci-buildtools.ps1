@@ -56,7 +56,7 @@ Need "$bt\clang+llvm-23.1.3-x86_64-pc-windows-msvc\bin\clang.exe" {
 }
 
 Need "$bt\wabt\wabt-1.0.42\bin\wasm2c.exe" {
-    Unpack (Fetch 'https://github.com/WebAssembly/wabt/releases/download/1.0.42/wabt-1.0.42-windows.tar.gz' 'wabt.tar.gz') "$bt\wabt"
+    Unpack (Fetch 'https://github.com/WebAssembly/wabt/releases/download/1.0.42/wabt-1.0.42-windows-x64.tar.gz' 'wabt.tar.gz') "$bt\wabt"
 }
 
 Need "$bt\cmake-4.4.4-windows-x86_64\bin\cmake.exe" {
