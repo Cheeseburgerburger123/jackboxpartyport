@@ -47,6 +47,9 @@ target_compile_definitions(flashplayeremu PRIVATE
     # No wasm bounds checks, inlined memory accessors (tools/gen.ps1): the console was CPU-bound in them.
     RW_UNCHECKED_MEMORY=1)
 target_compile_options(flashplayeremu PRIVATE $<$<COMPILE_LANGUAGE:C>:-O2>)
+# Newer wut declares OSCreateThread's entry point with a different (but call-compatible) argv type,
+# and GCC 14+ makes that an error; keep it a warning so the code builds with both old and new wut.
+target_compile_options(flashplayeremu PRIVATE $<$<COMPILE_LANGUAGE:C>:-Wno-error=incompatible-pointer-types>)
 # Assemble through sa/tools/as-crfix (built by sa/tools/wiiu-game-build.ps1): a no-op `mcrf 0,0` before
 # each mfcr, so Cemu's recompiler doesn't hand GCC's CR spills a stale cr0 once code gets hot (seen here
 # as AS3 class names read as garbage after a few games). One cycle on the console.
