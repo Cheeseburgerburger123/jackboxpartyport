@@ -92,7 +92,7 @@ if ! grep -q '^\[dkp-libs\]' /etc/pacman.conf; then
   pacman -U --noconfirm https://pkg.devkitpro.org/devkitpro-keyring.pkg.tar.zst
   printf '\n[dkp-libs]\nServer = https://pkg.devkitpro.org/packages\n\n[dkp-windows]\nServer = https://pkg.devkitpro.org/packages/windows/$arch/\n' >> /etc/pacman.conf
 fi
-pacman -Sy --noconfirm --needed devkit-env wiiu-dev wiiu-sdl2 wiiu-pkg-config
+pacman -Sy --noconfirm --needed make cmake devkit-env wiiu-dev wiiu-sdl2 wiiu-pkg-config
 '@
 & $bash -lc $dkp
 if ($LASTEXITCODE -ne 0) { throw 'devkitPro install failed' }
