@@ -200,6 +200,23 @@ impl<'gc> Sockets<'gc> {
     }
 
     pub fn update_sockets(context: &mut UpdateContext<'gc>) {
+        // Jackbox: Flash Player on macOS sends a socket's pending output automatically
+        // between frames, even without flush(). Jackbox's WebSocket library relies on that.
+        for (_, socket) in context.sockets.sockets.iter() {
+            if !socket.connected.get() {
+                continue;
+            }
+            if let SocketKind::Avm2(target) = socket.target {
+                let mut buffer = target.write_buffer();
+                if !buffer.is_empty() {
+                    let data = buffer.drain(..).collect::<Vec<_>>();
+                    if let Err(e) = socket.sender.borrow().try_send(data) {
+                        tracing::error!("Failed to auto-flush socket: {:?}", e);
+                    }
+                }
+            }
+        }
+
         let mut actions = vec![];
 
         while let Ok(action) = context.sockets.receiver.try_recv() {

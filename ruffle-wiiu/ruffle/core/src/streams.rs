@@ -1193,9 +1193,20 @@ impl<'gc> NetStream<'gc> {
         }
 
         // Paused streams deactivate themselves after seek processing.
+        let mut dt = dt;
         if !self.0.playing.get() {
-            StreamManager::deactivate(context, self);
-            return;
+            // Jackbox: Flash keeps buffering a paused stream, so onMetaData still arrives.
+            // Keep parsing the first tags of a paused FLV until its video stream (and
+            // metadata) has been set up.
+            let waiting_for_metadata = match &*source.stream_type.borrow() {
+                None => true,
+                Some(NetStreamType::Flv { video_stream, .. }) => video_stream.is_none(),
+            };
+            if !waiting_for_metadata {
+                StreamManager::deactivate(context, self);
+                return;
+            }
+            dt = FloatDuration::from_millis(1.0);
         }
 
         // Ensure the container stream type is known before continuing.

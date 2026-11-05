@@ -11,7 +11,15 @@ pub fn call<'gc>(
     args: FunctionArgs<'_, 'gc>,
 ) -> Result<Value<'gc>, Error<'gc>> {
     let name = args.get_string(activation, 0);
-    check_available(activation)?;
+    if !activation.context.external_interface.available() {
+        // Jackbox: return undefined instead of throwing, so games fall back to their
+        // pure-Flash code paths when there's no native host.
+        tracing::warn!(
+            "ExternalInterface.call({}) while unavailable, returning undefined",
+            name.to_utf8_lossy()
+        );
+        return Ok(Value::Undefined);
+    }
 
     let external_args = args
         .iter()
