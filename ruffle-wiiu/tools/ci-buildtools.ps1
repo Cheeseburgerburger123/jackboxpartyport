@@ -92,7 +92,12 @@ if ! grep -q '^\[dkp-libs\]' /etc/pacman.conf; then
   pacman -U --noconfirm https://pkg.devkitpro.org/devkitpro-keyring.pkg.tar.zst
   printf '\n[dkp-libs]\nServer = https://pkg.devkitpro.org/packages\n\n[dkp-windows]\nServer = https://pkg.devkitpro.org/packages/windows/$arch/\n' >> /etc/pacman.conf
 fi
-pacman -Sy --noconfirm --needed make cmake devkit-env wiiu-dev wiiu-sdl2 wiiu-pkg-config
+# pkg.devkitpro.org sometimes answers 403 to bursts of requests; retry a few times.
+for try in 1 2 3 4; do
+  pacman -Sy --noconfirm --needed make cmake devkit-env wiiu-dev wiiu-sdl2 wiiu-pkg-config && break
+  [ $try = 4 ] && exit 1
+  sleep $((try * 30))
+done
 '@
 & $bash -lc $dkp
 if ($LASTEXITCODE -ne 0) { throw 'devkitPro install failed' }
