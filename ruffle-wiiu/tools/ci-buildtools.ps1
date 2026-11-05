@@ -12,10 +12,10 @@ function Fetch($urls, $file) {
     if (Test-Path $out) { return $out }
     foreach ($url in @($urls)) {
         try {
-            "download $url"
+            Write-Host "download $url"
             Invoke-WebRequest -Uri $url -OutFile $out -UseBasicParsing
             return $out
-        } catch { "  failed: $($_.Exception.Message)" }
+        } catch { Write-Host "  failed: $($_.Exception.Message)" }
     }
     throw "could not download $file"
 }
@@ -27,7 +27,7 @@ function Unpack($archive, $dest) {
 }
 
 function Need($path, [scriptblock]$install) {
-    if (Test-Path $path) { "ok: $path"; return }
+    if (Test-Path $path) { Write-Host "ok: $path"; return }
     & $install
     if (-not (Test-Path $path)) { throw "missing after install: $path" }
 }
