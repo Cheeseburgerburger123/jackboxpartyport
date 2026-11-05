@@ -392,6 +392,7 @@ impl<'gc> NetStream<'gc> {
     /// that all data is appended in the correct order and that data from
     /// separate streams is not mixed together.
     pub fn load_buffer(self, context: &mut UpdateContext<'gc>, data: &mut Vec<u8>) {
+        tracing::info!("NetStream: received {} bytes", data.len());
         self.source().buffer.borrow_mut().append(data);
 
         StreamManager::activate(context, self);
@@ -1423,6 +1424,10 @@ impl<'gc> NetStream<'gc> {
                 }
             }
             Some(NetStreamKind::Avm2(_)) => {
+                tracing::info!(
+                    "NetStream: calling client.{}",
+                    String::from_utf8_lossy(variable_name)
+                );
                 let mut activation = Avm2Activation::from_nothing(context);
                 let client_object = self
                     .client()

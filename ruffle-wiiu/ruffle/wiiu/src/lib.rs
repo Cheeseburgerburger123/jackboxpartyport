@@ -130,6 +130,7 @@ pub extern "C" fn rw_start(url: *const u8, url_len: u32, width: u32, height: u32
         .build();
     player.lock().unwrap().set_gc_sleep_factor(1.5);
     host::log(2, &format!("rw_start {url} {width}x{height}"));
+    host::log(2, "jackbox build: patched Ruffle core");
     player.lock().unwrap().fetch_root_movie(
         url.to_string(),
         settings,
