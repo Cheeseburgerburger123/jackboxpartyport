@@ -1,0 +1,58 @@
+name: Build Wii U
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, ci, jackbox]
+
+jobs:
+  wiiu:
+    runs-on: windows-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      # The shaders and menu font are committed pre-built; make them newer than their sources so
+      # build-wiiu.ps1 doesn't try to rebuild them (which would need the Windows CafeGLSL compiler).
+      - name: Mark pre-built shaders and font as up to date
+        shell: pwsh
+        run: |
+          Get-ChildItem ruffle-wiiu/host/wiiu/shaders/*.gsh, ruffle-wiiu/host/wiiu/shaders/flashplayer_gsh.c, ruffle-wiiu/host/wiiu/font_chewy.h |
+            ForEach-Object { $_.LastWriteTime = (Get-Date).AddMinutes(5) }
+
+      - name: Cache build tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            buildtools/rustup
+            buildtools/cargo
+            buildtools/_downloads
+          key: buildtools-${{ hashFiles('ruffle-wiiu/tools/ci-buildtools.ps1') }}
+
+      - name: Cache Rust build
+        uses: actions/cache@v4
+        with:
+          path: ruffle-wiiu/ruffle/target
+          key: cargo-target-${{ hashFiles('ruffle-wiiu/ruffle/Cargo.lock') }}-${{ github.sha }}
+          restore-keys: cargo-target-${{ hashFiles('ruffle-wiiu/ruffle/Cargo.lock') }}-
+
+      - name: Install build tools
+        shell: pwsh
+        run: ./ruffle-wiiu/tools/ci-buildtools.ps1
+
+      - name: Build
+        shell: pwsh
+        run: ./ruffle-wiiu/tools/build-wiiu.ps1 -Configure
+
+      - name: Upload app
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flashplayeremu-wiiu
+          path: |
+            ruffle-wiiu/build-wiiu/flashplayeremu.wuhb
+            ruffle-wiiu/build-wiiu/flashplayeremu.rpx
+            ruffle-wiiu/build-wiiu/flashplayeremu.elf
+            ruffle-wiiu/build-wiiu/build.log
+            ruffle-wiiu/build-wiiu/configure.log
+          if-no-files-found: warn
