@@ -1,4 +1,4 @@
-//! Local-files-only navigator. Paths are WASI paths: "/" is the host's root folder (sd: on Wii U).
+//! Navigator: local files, plus web URLs and sockets through net.rs. Paths are WASI paths: "/" is the host's root folder (sd: on Wii U).
 
 use crate::host;
 use async_channel::{Receiver, Sender};
@@ -8,7 +8,7 @@ use ruffle_core::backend::navigator::{
     SuccessResponse, fetch_path, resolve_url_with_relative_base_path,
 };
 use ruffle_core::loader::Error;
-use ruffle_core::socket::{ConnectionState, SocketAction, SocketHandle};
+use ruffle_core::socket::{SocketAction, SocketHandle};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use url::{ParseError, Url};
@@ -122,6 +122,9 @@ impl NavigatorBackend for HostNavigator {
 
     fn fetch(&self, request: Request) -> OwnedFuture<Box<dyn SuccessResponse>, ErrorResponse> {
         let on_site = self.on_site(request.url());
+        if on_site.is_none() && crate::net::is_web_url(request.url()) {
+            return Box::pin(crate::net::fetch(request));
+        }
         fetch_path(self, "HostNavigator", on_site.as_deref().unwrap_or(request.url()), None)
     }
 
@@ -139,13 +142,14 @@ impl NavigatorBackend for HostNavigator {
 
     fn connect_socket(
         &mut self,
-        _host: String,
-        _port: u16,
-        _timeout: Duration,
+        host: String,
+        port: u16,
+        timeout: Duration,
         handle: SocketHandle,
-        _receiver: Receiver<Vec<u8>>,
+        receiver: Receiver<Vec<u8>>,
         sender: Sender<SocketAction>,
     ) {
-        let _ = sender.try_send(SocketAction::Connect(handle, ConnectionState::Failed));
+        host::log(2, &format!("net: game opens a socket to {host}:{port}"));
+        self.spawner.spawn_local(Box::pin(crate::net::run_socket(host, port, timeout, handle, receiver, sender)));
     }
 }

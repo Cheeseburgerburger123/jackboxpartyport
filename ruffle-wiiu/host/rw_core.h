@@ -76,6 +76,14 @@ void gfx_c3d_clear(uint32_t target, const float rgba[4], float depth, uint32_t s
 void gfx_c3d_draw(const uint32_t* words, uint32_t n);
 
 void plat_log(int level, const char* msg);
+
+// Network connections (TCP, TLS when `tls`), served by the platform. States: 0 connecting, 1 open,
+// 2 failed, 3 closed by the other side (data already received can still be read).
+uint32_t plat_sock_open(const char* host, uint32_t port, int tls);
+int plat_sock_state(uint32_t id);
+uint32_t plat_sock_send(uint32_t id, const uint8_t* data, uint32_t len);
+uint32_t plat_sock_recv(uint32_t id, uint8_t* buf, uint32_t cap);
+void plat_sock_close(uint32_t id);
 uint64_t plat_time_ns(void);
 void plat_random(uint8_t* buf, size_t n);
 

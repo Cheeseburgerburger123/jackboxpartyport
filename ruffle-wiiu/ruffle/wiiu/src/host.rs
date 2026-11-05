@@ -38,6 +38,17 @@ unsafe extern "C" {
     pub fn host_frame(target: u32, cmds: *const u32, nwords: u32);
     pub fn host_log(level: u32, msg: *const u8, len: u32);
 
+    // ---- network (host/wiiu/net_wiiu.c) ----
+    /// Opens a TCP connection (TLS if `tls` is 1) on a host thread; 0 if it couldn't start.
+    pub fn host_sock_open(host: *const u8, host_len: u32, port: u32, tls: u32) -> u32;
+    /// 0 connecting, 1 open, 2 failed, 3 closed by the other side (received data can still be read).
+    pub fn host_sock_state(id: u32) -> u32;
+    /// Queues bytes to send; returns how many were taken (all, or 0 on failure).
+    pub fn host_sock_send(id: u32, data: *const u8, len: u32) -> u32;
+    /// Takes up to `cap` received bytes; 0 if none are waiting.
+    pub fn host_sock_recv(id: u32, buf: *mut u8, cap: u32) -> u32;
+    pub fn host_sock_close(id: u32);
+
     // ---- Stage3D (see context3d.rs) ----
     /// Bit 0: flip Y / map depth 0..1 to -1..1 in the GLSL (OpenGL targets);
     /// bit 1: program constants as plain uniform arrays instead of uniform blocks (GX2 register mode).

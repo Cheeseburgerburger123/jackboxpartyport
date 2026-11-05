@@ -17,6 +17,7 @@ ruffle_video = { path = "../video" }
 slotmap = { workspace = true }
 swf = { path = "../swf" }
 async-channel = { workspace = true }
+encoding_rs = { workspace = true }
 naga-agal = { path = "../render/naga-agal" }
 naga-pixelbender = { path = "../render/naga-pixelbender", default-features = false }
 naga = { workspace = true, features = ["glsl-out"] }

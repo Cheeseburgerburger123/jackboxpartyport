@@ -29,6 +29,7 @@ add_executable(flashplayeremu
     music.c
     pads.c
     video_h264.c
+    net_wiiu.c
     ui.c
     stack_switch.S
     shaders/flashplayer_gsh.c)
@@ -66,6 +67,15 @@ target_link_libraries(flashplayeremu PRIVATE ${RW_SDL_STATIC_LIBRARIES} m)
 set(CAFEGLSL ${CMAKE_CURRENT_LIST_DIR}/../../../buildtools/cafeglsl-wiiu/cafeglsl-1.0.0-rc1-wiiu-ppc)
 target_include_directories(flashplayeremu PRIVATE ${CAFEGLSL}/include)
 target_link_libraries(flashplayeremu PRIVATE ${CAFEGLSL}/lib/libcafeglsl.a stdc++)
+
+# mbedTLS for game network connections (net_wiiu.c). Unpacked by ci-buildtools.ps1 from the official release.
+set(MBEDTLS ${CMAKE_CURRENT_LIST_DIR}/../../../buildtools/mbedtls/mbedtls-3.6.7)
+file(GLOB MBEDTLS_SOURCES ${MBEDTLS}/library/*.c)
+add_library(rw_mbedtls STATIC ${MBEDTLS_SOURCES})
+target_include_directories(rw_mbedtls PUBLIC ${MBEDTLS}/include ${CMAKE_CURRENT_LIST_DIR})
+target_compile_definitions(rw_mbedtls PUBLIC MBEDTLS_USER_CONFIG_FILE="mbedtls_config_wiiu.h")
+target_compile_options(rw_mbedtls PRIVATE -O2 -w)
+target_link_libraries(flashplayeremu PRIVATE rw_mbedtls)
 
 wut_create_rpx(flashplayeremu)
 # content/ (/vol/content on the console): the menu music, game text fonts and CREDITS.txt. Each theme plays

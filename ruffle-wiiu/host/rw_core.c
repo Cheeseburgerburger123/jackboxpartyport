@@ -452,6 +452,49 @@ void w2c_rw_host_c3d_draw(struct w2c_rw* rw, u32 words, u32 n) {
     free(w);
 }
 
+// ---------------------------------------------------------------- network
+
+u32 w2c_rw_host_sock_open(struct w2c_rw* rw, u32 host, u32 host_len, u32 port, u32 tls) {
+    (void)rw;
+    if (!host_len || host_len > 255 || !in_bounds(host, host_len)) return 0;
+    char h[256];
+    copy_out(h, host, host_len);
+    h[host_len] = 0;
+    return plat_sock_open(h, port, (int)tls);
+}
+
+u32 w2c_rw_host_sock_state(struct w2c_rw* rw, u32 id) {
+    (void)rw;
+    return (u32)plat_sock_state(id);
+}
+
+u32 w2c_rw_host_sock_send(struct w2c_rw* rw, u32 id, u32 data, u32 len) {
+    (void)rw;
+    if (!len || !in_bounds(data, len)) return 0;
+    uint8_t* p = (uint8_t*)malloc(len);
+    if (!p) return 0;
+    copy_out(p, data, len);
+    u32 n = plat_sock_send(id, p, len);
+    free(p);
+    return n;
+}
+
+u32 w2c_rw_host_sock_recv(struct w2c_rw* rw, u32 id, u32 buf, u32 cap) {
+    (void)rw;
+    if (!cap || !in_bounds(buf, cap)) return 0;
+    uint8_t* p = (uint8_t*)malloc(cap);
+    if (!p) return 0;
+    u32 n = plat_sock_recv(id, p, cap);
+    if (n) copy_in(buf, p, n);
+    free(p);
+    return n;
+}
+
+void w2c_rw_host_sock_close(struct w2c_rw* rw, u32 id) {
+    (void)rw;
+    plat_sock_close(id);
+}
+
 void w2c_rw_host_log(struct w2c_rw* rw, u32 level, u32 msg, u32 len) {
     (void)rw;
     if (!in_bounds(msg, len)) return;

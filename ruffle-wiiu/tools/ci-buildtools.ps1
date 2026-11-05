@@ -77,6 +77,11 @@ Need "$bt\cafeglsl-wiiu\cafeglsl-1.0.0-rc1-wiiu-ppc\lib\libcafeglsl.a" {
     Unpack $a "$bt\cafeglsl-wiiu"
 }
 
+# mbedTLS source (TLS for game network connections; compiled by host/wiiu/CMakeLists.txt).
+Need "$bt\mbedtls\mbedtls-3.6.7\library\ssl_tls.c" {
+    Unpack (Fetch 'https://github.com/Mbed-TLS/mbedtls/releases/download/mbedtls-3.6.7/mbedtls-3.6.7.tar.bz2' 'mbedtls-3.6.7.tar.bz2') "$bt\mbedtls"
+}
+
 # MSYS2 (preinstalled on the runner) + devkitPro (devkitPPC, wut, wiiu portlibs incl. SDL2).
 if (-not (Test-Path "$bt\msys64")) {
     New-Item -ItemType Junction -Path "$bt\msys64" -Target 'C:\msys64' | Out-Null

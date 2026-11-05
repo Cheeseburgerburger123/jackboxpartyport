@@ -6,6 +6,7 @@ mod context3d;
 mod filters;
 mod host;
 mod navigator;
+mod net;
 mod pixel_bender;
 mod render;
 mod site;
@@ -161,6 +162,7 @@ pub extern "C" fn rw_start(url: *const u8, url_len: u32, width: u32, height: u32
 #[unsafe(no_mangle)]
 pub extern "C" fn rw_tick(dt_ms: f64) -> i32 {
     let Some(s) = state() else { return 0 };
+    net::wake_all();
     s.executor.run();
     let mut player = s.player.lock().unwrap();
     player.tick(FloatDuration::from_millis(dt_ms));

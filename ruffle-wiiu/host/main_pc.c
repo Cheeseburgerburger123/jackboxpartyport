@@ -19,6 +19,13 @@ void plat_log(int level, const char* msg) {
     fflush(stderr);
 }
 
+// No network on the PC test host (yet).
+uint32_t plat_sock_open(const char* host, uint32_t port, int tls) { (void)host; (void)port; (void)tls; return 0; }
+int plat_sock_state(uint32_t id) { (void)id; return 2; }
+uint32_t plat_sock_send(uint32_t id, const uint8_t* data, uint32_t len) { (void)id; (void)data; (void)len; return 0; }
+uint32_t plat_sock_recv(uint32_t id, uint8_t* buf, uint32_t cap) { (void)id; (void)buf; (void)cap; return 0; }
+void plat_sock_close(uint32_t id) { (void)id; }
+
 uint64_t plat_time_ns(void) {
     return (uint64_t)((double)SDL_GetPerformanceCounter() * 1e9 / (double)SDL_GetPerformanceFrequency());
 }
