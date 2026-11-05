@@ -51,6 +51,7 @@ jobs:
           name: flashplayeremu-wiiu
           path: |
             ruffle-wiiu/build-wiiu/flashplayeremu.wuhb
+            ruffle-wiiu/build-wiiu/jackboxparty.wuhb
             ruffle-wiiu/build-wiiu/build.log
             ruffle-wiiu/build-wiiu/configure.log
           if-no-files-found: warn
@@ -61,5 +62,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: debug-symbols
-          path: ruffle-wiiu/build-wiiu/flashplayeremu.elf
+          path: |
+            ruffle-wiiu/build-wiiu/flashplayeremu.elf
+            ruffle-wiiu/build-wiiu/jackboxparty.elf
           retention-days: 30

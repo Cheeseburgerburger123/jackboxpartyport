@@ -24,6 +24,8 @@
 void rw_call_on_stack(void (*fn)(void), void* stack_top); // stack_switch.S
 #include <coreinit/time.h>
 #include <coreinit/memdefaultheap.h>
+#include <coreinit/systeminfo.h>
+#include <sysapp/launch.h>
 #include <dirent.h>
 #include <unistd.h>
 #include "pads.h"
@@ -40,6 +42,16 @@ void rw_call_on_stack(void (*fn)(void), void* stack_top); // stack_switch.S
 
 #define SD "fs:/vol/external01"
 #define APP_DIR SD "/wiiu/apps/flashplayeremu"
+// A build that starts one game straight away instead of the menu (CMakeLists.txt: the jackboxparty app).
+// RW_DIRECT_GAME is the game's WASI path, RW_DIRECT_TITLE its name on the loading screen.
+#ifndef RW_LOG_NAME
+#define RW_LOG_NAME "log.txt"
+#endif
+#ifdef RW_DIRECT_GAME
+static const char* g_direct_title = RW_DIRECT_TITLE;
+#else
+static const char* g_direct_title = NULL;
+#endif
 #define SCREEN_W 1280
 #define SCREEN_H 720
 
@@ -115,7 +127,7 @@ static void log_open(void) {
     FSInit();
     if (FSAddClient(&g_fs_client, FS_ERROR_FLAG_ALL) != FS_STATUS_OK) return;
     FSInitCmdBlock(&g_fs_block);
-    if (FSOpenFile(&g_fs_client, &g_fs_block, "/vol/external01/wiiu/apps/flashplayeremu/log.txt", "w", &g_log_fh,
+    if (FSOpenFile(&g_fs_client, &g_fs_block, "/vol/external01/wiiu/apps/flashplayeremu/" RW_LOG_NAME, "w", &g_log_fh,
                    FS_ERROR_FLAG_ALL) != FS_STATUS_OK)
         return;
     static OSThread thread __attribute__((aligned(16)));
@@ -1719,7 +1731,7 @@ static int run_game(const char* path, uint8_t* canvas) {
     // seconds on the console (DinoRun: 13 s), which used to look like a freeze.
     int gi = game_by_path(path);
     const char* slash = strrchr(path, '/');
-    ui_draw_loading(canvas, gi >= 0 ? g_games[gi].title : slash ? slash + 1 : path);
+    ui_draw_loading(canvas, gi >= 0 ? g_games[gi].title : g_direct_title ? g_direct_title : slash ? slash + 1 : path);
     gfx_tex_update_screen(canvas);
     gfx_gx2_set_fade(1.0f);
     present();
@@ -1802,6 +1814,10 @@ static int run_game(const char* path, uint8_t* canvas) {
         // Minus goes back to the menu (once it has been seen up: the press that started things doesn't count).
         if (!(hold & VPAD_BUTTON_MINUS)) minus_armed = 1;
         else if (minus_armed && !(hold_prev & VPAD_BUTTON_MINUS)) leave = 1;
+#ifdef RW_DIRECT_GAME
+        // The HOME menu is off in this build (see app_main): HOME leaves to the Wii U Menu instead.
+        if (err == VPAD_READ_SUCCESS && (vs.trigger & VPAD_BUTTON_HOME)) leave = 1;
+#endif
         hold_prev = hold;
         // The mouse on the left stick (or a Wii Remote's pointer): it shows when moved and hides when left alone.
         {
@@ -2141,6 +2157,36 @@ static void app_main(void) {
 
     uint8_t* canvas = (uint8_t*)malloc((size_t)SCREEN_W * SCREEN_H * 4);
     load_settings();
+
+#ifdef RW_DIRECT_GAME
+    {
+        // Opening the HOME menu while a game runs crashed the app (pc 0115778C), so this build turns it off
+        // and treats HOME like Minus: both go back to the Wii U Menu.
+        OSEnableHomeButtonMenu(FALSE);
+        struct stat st;
+        if (stat(SD RW_DIRECT_GAME, &st) != 0) {
+            logf_("%s is missing", RW_DIRECT_GAME);
+            ui_draw_loading(canvas, "Game files missing: copy them to sd:" RW_DIRECT_GAME);
+            gfx_tex_update_screen(canvas);
+            gfx_gx2_set_fade(1.0f);
+            for (int i = 0; i < 60 * 15 && running(); i++) present();
+        } else {
+            run_game(RW_DIRECT_GAME, canvas);
+        }
+        logf_("leaving to the Wii U Menu");
+        // Ask for the Wii U Menu, then only let ProcUI run (no drawing: the GPU goes away on the way out).
+        if (WHBProcIsRunning()) SYSLaunchMenu();
+        while (WHBProcIsRunning()) OSSleepTicks(OSMillisecondsToTicks(16));
+        gfx_gx2_gpu_lost();
+        free(canvas);
+        gfx_gx2_set_overlay(NULL);
+        kbd_shutdown();
+        log_close();
+        WHBGfxShutdown();
+        WHBProcShutdown();
+        return;
+    }
+#endif
 
     // ---- game pictures (only for games not seen before)
     int missing = 0;

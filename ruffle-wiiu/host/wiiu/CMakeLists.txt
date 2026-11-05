@@ -16,7 +16,16 @@ file(GLOB GEN_SOURCES ${GEN}/flashplayer_*.c)
 # ~19 MB; plain -O1 and -O2 measured no faster in Cemu, so the console-tested -O1 -fno-inline stays.)
 set_source_files_properties(${GEN_SOURCES} PROPERTIES COMPILE_OPTIONS "-O1;-fno-inline;-w")
 
-add_executable(flashplayeremu
+# mbedTLS for game network connections (net_wiiu.c). Unpacked by ci-buildtools.ps1 from the official release.
+set(MBEDTLS ${CMAKE_CURRENT_LIST_DIR}/../../../buildtools/mbedtls/mbedtls-3.6.7)
+file(GLOB MBEDTLS_SOURCES ${MBEDTLS}/library/*.c)
+add_library(rw_mbedtls STATIC ${MBEDTLS_SOURCES})
+target_include_directories(rw_mbedtls PUBLIC ${MBEDTLS}/include ${CMAKE_CURRENT_LIST_DIR})
+target_compile_definitions(rw_mbedtls PUBLIC MBEDTLS_USER_CONFIG_FILE="mbedtls_config_wiiu.h")
+target_compile_options(rw_mbedtls PRIVATE -O2 -w)
+
+
+add_library(rw_common OBJECT
     ${GEN_SOURCES}
     ${HOST}/wasm-rt/wasm-rt-impl.c
     ${HOST}/wasm-rt/wasm-rt-mem-impl.c
@@ -25,7 +34,6 @@ add_executable(flashplayeremu
     ${HOST}/perlin.c
     gfx_gx2.c
     kbd.cpp
-    main_wiiu.c
     music.c
     pads.c
     video_h264.c
@@ -33,49 +41,50 @@ add_executable(flashplayeremu
     ui.c
     stack_switch.S
     shaders/flashplayer_gsh.c)
-target_include_directories(flashplayeremu PRIVATE ${HOST} ${HOST}/wasm-rt ${GEN})
-target_compile_definitions(flashplayeremu PRIVATE
-    WABT_BIG_ENDIAN=1
-    WASM_RT_USE_MMAP=0
-    WASM_RT_MEMCHECK_BOUNDS_CHECK=1
-    WASM_RT_NO_THREAD_LOCAL=1
-    WASM_RT_MAX_CALL_STACK_DEPTH=20000
-    WASM_RT_GROW_LOG=rw_grow_log
-    # Reserve as much wasm memory as the console can spare up front (main_wiiu.c: rw_mem_reserve).
-    RW_MEM_RESERVE=rw_mem_reserve
-    RW_MEM_RELEASE=rw_mem_release
-    RW_MEM_CAN_GROW=rw_mem_can_grow
-    # No wasm bounds checks, inlined memory accessors (tools/gen.ps1): the console was CPU-bound in them.
-    RW_UNCHECKED_MEMORY=1)
-target_compile_options(flashplayeremu PRIVATE $<$<COMPILE_LANGUAGE:C>:-O2>)
-# Newer wut declares OSCreateThread's entry point with a different (but call-compatible) argv type,
-# and GCC 14+ makes that an error; keep it a warning so the code builds with both old and new wut.
-target_compile_options(flashplayeremu PRIVATE $<$<COMPILE_LANGUAGE:C>:-Wno-error=incompatible-pointer-types>)
-# Assemble through sa/tools/as-crfix (built by sa/tools/wiiu-game-build.ps1): a no-op `mcrf 0,0` before
-# each mfcr, so Cemu's recompiler doesn't hand GCC's CR spills a stale cr0 once code gets hot (seen here
-# as AS3 class names read as garbage after a few games). One cycle on the console.
-target_compile_options(flashplayeremu PRIVATE $<$<COMPILE_LANGUAGE:C>:-B${CMAKE_CURRENT_LIST_DIR}/../../../sa/tools/as-crfix/bin/>)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(RW_SDL REQUIRED sdl2)
-target_include_directories(flashplayeremu PRIVATE ${RW_SDL_STATIC_INCLUDE_DIRS})
-target_link_directories(flashplayeremu PRIVATE ${RW_SDL_STATIC_LIBRARY_DIRS})
-target_link_libraries(flashplayeremu PRIVATE ${RW_SDL_STATIC_LIBRARIES} m)
+# Settings shared by the common objects and each app built from them.
+function(rw_setup t)
+    target_include_directories(${t} PRIVATE ${HOST} ${HOST}/wasm-rt ${GEN})
+    target_compile_definitions(${t} PRIVATE
+        WABT_BIG_ENDIAN=1
+        WASM_RT_USE_MMAP=0
+        WASM_RT_MEMCHECK_BOUNDS_CHECK=1
+        WASM_RT_NO_THREAD_LOCAL=1
+        WASM_RT_MAX_CALL_STACK_DEPTH=20000
+        WASM_RT_GROW_LOG=rw_grow_log
+        # Reserve as much wasm memory as the console can spare up front (main_wiiu.c: rw_mem_reserve).
+        RW_MEM_RESERVE=rw_mem_reserve
+        RW_MEM_RELEASE=rw_mem_release
+        RW_MEM_CAN_GROW=rw_mem_can_grow
+        # No wasm bounds checks, inlined memory accessors (tools/gen.ps1): the console was CPU-bound in them.
+        RW_UNCHECKED_MEMORY=1)
+    target_compile_options(${t} PRIVATE $<$<COMPILE_LANGUAGE:C>:-O2>)
+    # Newer wut declares OSCreateThread's entry point with a different (but call-compatible) argv type,
+    # and GCC 14+ makes that an error; keep it a warning so the code builds with both old and new wut.
+    target_compile_options(${t} PRIVATE $<$<COMPILE_LANGUAGE:C>:-Wno-error=incompatible-pointer-types>)
+    # Assemble through sa/tools/as-crfix (built by sa/tools/wiiu-game-build.ps1): a no-op `mcrf 0,0` before
+    # each mfcr, so Cemu's recompiler doesn't hand GCC's CR spills a stale cr0 once code gets hot (seen here
+    # as AS3 class names read as garbage after a few games). One cycle on the console.
+    target_compile_options(${t} PRIVATE $<$<COMPILE_LANGUAGE:C>:-B${CMAKE_CURRENT_LIST_DIR}/../../../sa/tools/as-crfix/bin/>)
 
-# CafeGLSL (Mesa-based GLSL -> GX2 compiler) for Stage3D shaders, compiled at runtime.
-# Unpacked from cafeglsl-1.0.0-rc1-wiiu-ppc.tar.xz; adds a lot of code, keep an eye on the 32 MB limit.
-set(CAFEGLSL ${CMAKE_CURRENT_LIST_DIR}/../../../buildtools/cafeglsl-wiiu/cafeglsl-1.0.0-rc1-wiiu-ppc)
-target_include_directories(flashplayeremu PRIVATE ${CAFEGLSL}/include)
-target_link_libraries(flashplayeremu PRIVATE ${CAFEGLSL}/lib/libcafeglsl.a stdc++)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(RW_SDL REQUIRED sdl2)
+    target_include_directories(${t} PRIVATE ${RW_SDL_STATIC_INCLUDE_DIRS})
+    target_link_directories(${t} PRIVATE ${RW_SDL_STATIC_LIBRARY_DIRS})
+    target_link_libraries(${t} PRIVATE ${RW_SDL_STATIC_LIBRARIES} m)
 
-# mbedTLS for game network connections (net_wiiu.c). Unpacked by ci-buildtools.ps1 from the official release.
-set(MBEDTLS ${CMAKE_CURRENT_LIST_DIR}/../../../buildtools/mbedtls/mbedtls-3.6.7)
-file(GLOB MBEDTLS_SOURCES ${MBEDTLS}/library/*.c)
-add_library(rw_mbedtls STATIC ${MBEDTLS_SOURCES})
-target_include_directories(rw_mbedtls PUBLIC ${MBEDTLS}/include ${CMAKE_CURRENT_LIST_DIR})
-target_compile_definitions(rw_mbedtls PUBLIC MBEDTLS_USER_CONFIG_FILE="mbedtls_config_wiiu.h")
-target_compile_options(rw_mbedtls PRIVATE -O2 -w)
-target_link_libraries(flashplayeremu PRIVATE rw_mbedtls)
+    # CafeGLSL (Mesa-based GLSL -> GX2 compiler) for Stage3D shaders, compiled at runtime.
+    # Unpacked from cafeglsl-1.0.0-rc1-wiiu-ppc.tar.xz; adds a lot of code, keep an eye on the 32 MB limit.
+    set(CAFEGLSL ${CMAKE_CURRENT_LIST_DIR}/../../../buildtools/cafeglsl-wiiu/cafeglsl-1.0.0-rc1-wiiu-ppc)
+    target_include_directories(${t} PRIVATE ${CAFEGLSL}/include)
+    target_link_libraries(${t} PRIVATE ${CAFEGLSL}/lib/libcafeglsl.a stdc++)
+    target_link_libraries(${t} PRIVATE rw_mbedtls)
+endfunction()
+rw_setup(rw_common)
+
+# The Flashplayer Emu app: the game menu.
+add_executable(flashplayeremu main_wiiu.c $<TARGET_OBJECTS:rw_common>)
+rw_setup(flashplayeremu)
 
 wut_create_rpx(flashplayeremu)
 # content/ (/vol/content on the console): the menu music, game text fonts and CREDITS.txt. Each theme plays
@@ -89,3 +98,24 @@ wut_create_wuhb(flashplayeremu
     ICON "${CMAKE_CURRENT_LIST_DIR}/meta/icon.png"
     TVSPLASH "${CMAKE_CURRENT_LIST_DIR}/meta/tv.png"
     DRCSPLASH "${CMAKE_CURRENT_LIST_DIR}/meta/drc.png")
+
+# A second app that starts one game straight away, with its own name and art. Built only when its art is
+# present (meta-jackbox/, kept in a private copy of the repo: the art isn't ours to publish).
+set(JACKBOX_META ${CMAKE_CURRENT_LIST_DIR}/meta-jackbox)
+if(EXISTS ${JACKBOX_META}/icon.png AND EXISTS ${JACKBOX_META}/tv.png AND EXISTS ${JACKBOX_META}/drc.png)
+    add_executable(jackboxparty main_wiiu.c $<TARGET_OBJECTS:rw_common>)
+    rw_setup(jackboxparty)
+    target_compile_definitions(jackboxparty PRIVATE
+        RW_DIRECT_GAME="/wiiu/apps/flashplayeremu/swf/TJSPLoader/TJSPLoader.swf"
+        RW_DIRECT_TITLE="The Jackbox Party Starter"
+        RW_LOG_NAME="log-jackbox.txt")
+    wut_create_rpx(jackboxparty)
+    wut_create_wuhb(jackboxparty
+        CONTENT "${CMAKE_CURRENT_LIST_DIR}/content"
+        NAME "The Jackbox Party Starter"
+        SHORTNAME "Jackbox Party Starter"
+        AUTHOR "Jackbox Games (Wii U port via Flashplayer Emu and Ruffle)"
+        ICON "${JACKBOX_META}/icon.png"
+        TVSPLASH "${JACKBOX_META}/tv.png"
+        DRCSPLASH "${JACKBOX_META}/drc.png")
+endif()
