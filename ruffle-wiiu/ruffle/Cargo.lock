@@ -5210,6 +5210,7 @@ name = "ruffle_wiiu"
 version = "0.7.1"
 dependencies = [
  "async-channel",
+ "encoding_rs",
  "indexmap",
  "naga",
  "naga-agal",
