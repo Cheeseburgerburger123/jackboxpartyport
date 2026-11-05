@@ -106,7 +106,7 @@ if(EXISTS ${JACKBOX_META}/icon.png AND EXISTS ${JACKBOX_META}/tv.png AND EXISTS 
     add_executable(jackboxparty main_wiiu.c $<TARGET_OBJECTS:rw_common>)
     rw_setup(jackboxparty)
     target_compile_definitions(jackboxparty PRIVATE
-        RW_DIRECT_GAME="/wiiu/apps/flashplayeremu/swf/TJSPLoader/TJSPLoader.swf"
+        RW_DIRECT_GAME="wiiu/apps/flashplayeremu/swf/TJSPLoader/TJSPLoader.swf"
         RW_DIRECT_TITLE="The Jackbox Party Starter"
         RW_LOG_NAME="log-jackbox.txt")
     wut_create_rpx(jackboxparty)

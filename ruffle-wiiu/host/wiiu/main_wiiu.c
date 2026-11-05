@@ -43,11 +43,12 @@ void rw_call_on_stack(void (*fn)(void), void* stack_top); // stack_switch.S
 #define SD "fs:/vol/external01"
 #define APP_DIR SD "/wiiu/apps/flashplayeremu"
 // A build that starts one game straight away instead of the menu (CMakeLists.txt: the jackboxparty app).
-// RW_DIRECT_GAME is the game's WASI path, RW_DIRECT_TITLE its name on the loading screen.
+// RW_DIRECT_GAME is the game's WASI path without its first slash, RW_DIRECT_TITLE its name on the loading screen.
 #ifndef RW_LOG_NAME
 #define RW_LOG_NAME "log.txt"
 #endif
 #ifdef RW_DIRECT_GAME
+#define RW_DIRECT_PATH "/" RW_DIRECT_GAME // (the slash is added here: MSYS rewrites "/..." arguments into Windows paths)
 static const char* g_direct_title = RW_DIRECT_TITLE;
 #else
 static const char* g_direct_title = NULL;
@@ -2158,20 +2159,20 @@ static void app_main(void) {
     uint8_t* canvas = (uint8_t*)malloc((size_t)SCREEN_W * SCREEN_H * 4);
     load_settings();
 
-#ifdef RW_DIRECT_GAME
+#ifdef RW_DIRECT_PATH
     {
         // Opening the HOME menu while a game runs crashed the app (pc 0115778C), so this build turns it off
         // and treats HOME like Minus: both go back to the Wii U Menu.
         OSEnableHomeButtonMenu(FALSE);
         struct stat st;
-        if (stat(SD RW_DIRECT_GAME, &st) != 0) {
-            logf_("%s is missing", RW_DIRECT_GAME);
-            ui_draw_loading(canvas, "Game files missing: copy them to sd:" RW_DIRECT_GAME);
+        if (stat(SD RW_DIRECT_PATH, &st) != 0) {
+            logf_("%s is missing", RW_DIRECT_PATH);
+            ui_draw_loading(canvas, "Game files missing: copy them to sd:" RW_DIRECT_PATH);
             gfx_tex_update_screen(canvas);
             gfx_gx2_set_fade(1.0f);
             for (int i = 0; i < 60 * 15 && running(); i++) present();
         } else {
-            run_game(RW_DIRECT_GAME, canvas);
+            run_game(RW_DIRECT_PATH, canvas);
         }
         logf_("leaving to the Wii U Menu");
         // Ask for the Wii U Menu, then only let ProcUI run (no drawing: the GPU goes away on the way out).
