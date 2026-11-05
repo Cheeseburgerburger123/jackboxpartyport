@@ -18,7 +18,6 @@ typedef struct {
     uint32_t fb_size;
     uint8_t* stream;
     uint32_t stream_size;
-    uint8_t* rgba;
     uint32_t w, h;
     // the last frame the decoder gave
     uint8_t* out;
@@ -101,7 +100,6 @@ static void close_decoder(Decoder* d) {
     free(d->mem);
     free(d->fb);
     free(d->stream);
-    free(d->rgba);
     memset(d, 0, sizeof(*d));
 }
 
@@ -155,14 +153,12 @@ uint32_t gfx_h264_open(uint32_t w, uint32_t h) {
     d->fb_size = pitch * ah * 3 / 2;
     d->mem = alloc_decoder_memory(size);
     d->fb = (uint8_t*)memalign(0x100, d->fb_size);
-    d->rgba = (uint8_t*)malloc((size_t)w * h * 4);
-    if (!d->mem || !d->fb || !d->rgba) {
+    if (!d->mem || !d->fb) {
         snprintf(m, sizeof(m), "H.264: out of memory for %ux%u (decoder %u KB%s, picture %u KB%s)", (unsigned)w, (unsigned)h,
                  (unsigned)(size >> 10), d->mem ? "" : " failed", (unsigned)(d->fb_size >> 10), d->fb ? "" : " failed");
         plat_log(1, m);
         free(d->mem);
         free(d->fb);
-        free(d->rgba);
         memset(d, 0, sizeof(*d));
         return 0;
     }
@@ -210,6 +206,7 @@ int gfx_h264_decode(uint32_t id, uint32_t tex, const uint8_t* data, uint32_t len
     memset(d->stream + len, 0, 16);
     DCFlushRange(d->stream, len + 16);
     d->out = NULL;
+    OSTime t0 = OSGetSystemTime();
     H264Error e = run_decode(d, len);
     if (e != H264_ERROR_OK && (e & 0xffff0000u) == H264_ERROR_GENERIC) {
         static int reported;
@@ -229,22 +226,48 @@ int gfx_h264_decode(uint32_t id, uint32_t tex, const uint8_t* data, uint32_t len
     DCInvalidateRange(d->fb, d->fb_size);
     int w = d->out_w < (int)d->w ? d->out_w : (int)d->w;
     int h = d->out_h < (int)d->h ? d->out_h : (int)d->h;
+    OSTime t1 = OSGetSystemTime();
+    // Straight into the texture (no copy in between), two pixels per step sharing one U/V pair.
+    uint32_t pitch = 0;
+    uint8_t* dst = gfx_tex_update_begin(tex, 0, 0, &pitch);
+    if (!dst) return 0;
     const uint8_t* yp = d->out;
     const uint8_t* uvp = d->out + (size_t)d->out_line * ((d->out_h + 15) & ~15);
     for (int y = 0; y < h; y++) {
         const uint8_t* yl = yp + (size_t)y * d->out_line;
         const uint8_t* uvl = uvp + (size_t)(y / 2) * d->out_line;
-        uint8_t* o = d->rgba + (size_t)y * d->w * 4;
-        for (int x = 0; x < w; x++) {
-            int c = 298 * ((int)yl[x] - 16) + 128;
+        uint32_t* o = (uint32_t*)(dst + (size_t)y * pitch);
+        int x = 0;
+        for (; x + 1 < w; x += 2) {
+            int u = (int)uvl[x] - 128, v = (int)uvl[x + 1] - 128;
+            int rv = 409 * v + 128, gv = 128 - 100 * u - 208 * v, bu = 516 * u + 128;
+            int c0 = 298 * ((int)yl[x] - 16), c1 = 298 * ((int)yl[x + 1] - 16);
+            o[x] = (uint32_t)clamp8((c0 + rv) >> 8) << 24 | (uint32_t)clamp8((c0 + gv) >> 8) << 16 |
+                   (uint32_t)clamp8((c0 + bu) >> 8) << 8 | 255u;
+            o[x + 1] = (uint32_t)clamp8((c1 + rv) >> 8) << 24 | (uint32_t)clamp8((c1 + gv) >> 8) << 16 |
+                       (uint32_t)clamp8((c1 + bu) >> 8) << 8 | 255u;
+        }
+        if (x < w) {
             int u = (int)uvl[x & ~1] - 128, v = (int)uvl[x | 1] - 128;
-            o[0] = clamp8((c + 409 * v) >> 8);
-            o[1] = clamp8((c - 100 * u - 208 * v) >> 8);
-            o[2] = clamp8((c + 516 * u) >> 8);
-            o[3] = 255;
-            o += 4;
+            int c = 298 * ((int)yl[x] - 16) + 128;
+            o[x] = (uint32_t)clamp8((c + 409 * v) >> 8) << 24 | (uint32_t)clamp8((c - 100 * u - 208 * v) >> 8) << 16 |
+                   (uint32_t)clamp8((c + 516 * u) >> 8) << 8 | 255u;
         }
     }
-    gfx_tex_update(tex, 0, 0, (uint32_t)w, (uint32_t)h, d->rgba, d->w * 4);
+    gfx_tex_update_end(tex, 0, (uint32_t)h);
+    OSTime t2 = OSGetSystemTime();
+    static uint32_t frames;
+    static uint64_t decode_us, convert_us;
+    decode_us += (uint64_t)OSTicksToMicroseconds(t1 - t0);
+    convert_us += (uint64_t)OSTicksToMicroseconds(t2 - t1);
+    if (++frames == 120) {
+        char m[120];
+        snprintf(m, sizeof(m), "H.264: %dx%d, decode %u.%u ms, convert %u.%u ms per picture", w, h,
+                 (unsigned)(decode_us / 120000), (unsigned)(decode_us / 12000 % 10), (unsigned)(convert_us / 120000),
+                 (unsigned)(convert_us / 12000 % 10));
+        plat_log(2, m);
+        frames = 0;
+        decode_us = convert_us = 0;
+    }
     return 1;
 }
