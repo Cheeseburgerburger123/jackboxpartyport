@@ -768,7 +768,12 @@ static const KeyMap g_keymap[] = {
     // The right stick is a second d-pad; the left stick moves the mouse, with L and R as its buttons.
     { VPAD_STICK_R_EMULATION_LEFT, RW_KEY_LEFT }, { VPAD_STICK_R_EMULATION_RIGHT, RW_KEY_RIGHT },
     { VPAD_STICK_R_EMULATION_UP, RW_KEY_UP }, { VPAD_STICK_R_EMULATION_DOWN, RW_KEY_DOWN },
+#ifdef RW_DIRECT_GAME
+    // Jackbox: A selects (Enter), B goes back (Escape), like its PC keyboard controls.
+    { VPAD_BUTTON_A, RW_KEY_ENTER }, { VPAD_BUTTON_B, RW_KEY_ESCAPE }, { VPAD_BUTTON_X, 'x' }, { VPAD_BUTTON_Y, 'c' },
+#else
     { VPAD_BUTTON_A, ' ' }, { VPAD_BUTTON_B, 'z' }, { VPAD_BUTTON_X, 'x' }, { VPAD_BUTTON_Y, 'c' },
+#endif
     { VPAD_BUTTON_PLUS, RW_KEY_ENTER },
     { VPAD_BUTTON_ZL, RW_KEY_SHIFT }, { VPAD_BUTTON_ZR, RW_KEY_CONTROL },
 };
