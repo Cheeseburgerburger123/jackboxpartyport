@@ -1089,6 +1089,9 @@ static void osk_redraw(void) {
 
 static void osk_tab_redraw(void) {
     if (!g_osk_px) return;
+#ifdef RW_DIRECT_GAME
+    return;
+#endif
     ui_draw_osk_tab(g_osk_px, g_osk_open);
     gfx_gx2_set_panel(1, g_osk_px + (size_t)UI_OSK_TAB_CANVAS_Y * UI_W * 4, UI_OSK_TAB_W, UI_OSK_TAB_H, UI_W * 4, UI_OSK_TAB_X,
                       UI_OSK_TAB_Y);
@@ -1109,6 +1112,11 @@ static void osk_set_open(int open) {
 
 // A press at a screen position: 1 if it was on the tab or the keyboard, so it isn't the game's.
 static int osk_press(int x, int y) {
+#ifdef RW_DIRECT_GAME
+    (void)x;
+    (void)y;
+    return 0;
+#endif
     if (x >= UI_OSK_TAB_X && x < UI_OSK_TAB_X + UI_OSK_TAB_W && y >= UI_OSK_TAB_Y && y < UI_OSK_TAB_Y + UI_OSK_TAB_H) {
         osk_set_open(!g_osk_open);
         return 1;
@@ -1737,7 +1745,14 @@ static int run_game(const char* path, uint8_t* canvas) {
     // seconds on the console (DinoRun: 13 s), which used to look like a freeze.
     int gi = game_by_path(path);
     const char* slash = strrchr(path, '/');
+#ifdef RW_DIRECT_GAME
+    (void)gi;
+    (void)slash;
+    memset(canvas, 0, (size_t)SCREEN_W * SCREEN_H * 4); // plain black until the game draws
+    for (size_t i = 3; i < (size_t)SCREEN_W * SCREEN_H * 4; i += 4) canvas[i] = 255;
+#else
     ui_draw_loading(canvas, gi >= 0 ? g_games[gi].title : g_direct_title ? g_direct_title : slash ? slash + 1 : path);
+#endif
     gfx_tex_update_screen(canvas);
     gfx_gx2_set_fade(1.0f);
     present();
@@ -1763,7 +1778,11 @@ static int run_game(const char* path, uint8_t* canvas) {
     g_osk_down = -1;
     int osk_touch = 0, script_touch = 0, script_tx = 0, script_ty = 0;
     osk_set_open(0);
+#ifdef RW_DIRECT_GAME
+    gfx_gx2_panel_on(1, 0); // no on-screen keyboard button: the game never needs typing
+#else
     gfx_gx2_panel_on(1, g_osk_px != NULL);
+#endif
     double touch_x = 0, touch_y = 0;
     double audio_acc = 0;
     static int16_t audio_buf[48000 / 30 * 2];
