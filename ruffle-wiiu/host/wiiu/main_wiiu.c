@@ -1839,7 +1839,7 @@ static int run_game(const char* path, uint8_t* canvas) {
         // Minus goes back to the menu (once it has been seen up: the press that started things doesn't count).
         if (!(hold & VPAD_BUTTON_MINUS)) minus_armed = 1;
         else if (minus_armed && !(hold_prev & VPAD_BUTTON_MINUS)) leave = 1;
-#ifdef RW_DIRECT_GAME
+#if defined(RW_DIRECT_GAME) && !defined(RW_HOME_TEST)
         // The HOME menu is off in this build (see app_main): HOME leaves to the Wii U Menu instead.
         if (err == VPAD_READ_SUCCESS && (vs.trigger & VPAD_BUTTON_HOME)) leave = 1;
 #endif
@@ -2187,7 +2187,9 @@ static void app_main(void) {
     {
         // Opening the HOME menu while a game runs crashed the app (pc 0115778C), so this build turns it off
         // and treats HOME like Minus: both go back to the Wii U Menu.
+#ifndef RW_HOME_TEST // (a test build leaves the HOME menu on, to see where it crashes)
         OSEnableHomeButtonMenu(FALSE);
+#endif
         struct stat st;
         if (stat(SD RW_DIRECT_PATH, &st) != 0) {
             logf_("%s is missing", RW_DIRECT_PATH);
