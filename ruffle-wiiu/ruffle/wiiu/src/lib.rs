@@ -128,6 +128,9 @@ pub extern "C" fn rw_start(url: *const u8, url_len: u32, width: u32, height: u32
         .with_autoplay(true)
         .with_default_font(true)
         .with_spoofed_url(spoof)
+        // Flash stops a script after 15 s, which suits a PC. The Wii U runs scripts about 10x slower, and big
+        // games (Trivia Murder Party 2) need longer than that just to load.
+        .with_max_execution_duration(std::time::Duration::from_secs(120))
         .build();
     player.lock().unwrap().set_gc_sleep_factor(1.5);
     host::log(2, &format!("rw_start {url} {width}x{height}"));
