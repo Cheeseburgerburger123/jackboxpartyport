@@ -53,6 +53,7 @@ uint32_t gfx_h264_open(uint32_t w, uint32_t h);
 int gfx_h264_decode(uint32_t id, uint32_t tex, const uint8_t* data, uint32_t len);
 void gfx_h264_close(uint32_t id);
 void gfx_h264_reset(void);
+void gfx_h264_abandon(void);
 // Pixel Bender: a program (gfx_c3d_program) drawn over a whole target with up to 8 input textures. Float textures
 // hold RGBA as 32-bit floats.
 int gfx_pb_run(uint32_t program, uint32_t target, const uint32_t* textures, const float* floats, uint32_t nfloats,

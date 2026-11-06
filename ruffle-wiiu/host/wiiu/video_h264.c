@@ -174,6 +174,12 @@ void gfx_h264_close(uint32_t id) {
     if (id && id <= MAX_DECODERS) close_decoder(&g_dec[id - 1]);
 }
 
+// The app is closing (HOME > Close Software, power): the system has already shut the decoder down, so
+// decoders are only forgotten from now on, never called (as when one stops answering).
+void gfx_h264_abandon(void) {
+    g_decoder_stuck = 1;
+}
+
 void gfx_h264_reset(void) {
     for (int i = 0; i < MAX_DECODERS; i++) close_decoder(&g_dec[i]);
 }

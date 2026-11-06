@@ -317,6 +317,9 @@ void gfx_h264_close(uint32_t id) {
 void gfx_h264_reset(void) {
 }
 
+void gfx_h264_abandon(void) {
+}
+
 void gfx_tex_copy(uint32_t dst, uint32_t src) {
     (void)dst; (void)src;
 }
