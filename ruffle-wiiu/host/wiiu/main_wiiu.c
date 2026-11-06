@@ -211,8 +211,13 @@ static void present(void) {
 }
 
 // WHBProcIsRunning, and once it says no (HOME / power), the GPU is off limits (gfx_gx2_gpu_lost).
+// Set once ProcUI says the app is closing (HOME > Close Software, power): from then on the system keyboard
+// can't be shut down (that hung the app on its way out), so it's left for the system to clear.
+static int g_closing;
+
 static int running(void) {
     if (WHBProcIsRunning()) return 1;
+    g_closing = 1;
     gfx_gx2_gpu_lost();
     gfx_h264_abandon(); // (Close Software: the decoder hardware is already gone, calling into it crashed)
     return 0;
@@ -2199,7 +2204,7 @@ static void app_main(void) {
         gfx_gx2_gpu_lost();
         free(canvas);
         gfx_gx2_set_overlay(NULL);
-        kbd_shutdown();
+        if (!g_closing) kbd_shutdown();
         log_close();
         WHBGfxShutdown();
         WHBProcShutdown();
@@ -2230,7 +2235,7 @@ static void app_main(void) {
     free(canvas);
     logf_("exiting");
     gfx_gx2_set_overlay(NULL);
-    kbd_shutdown();
+    if (!g_closing) kbd_shutdown();
     log_close();
     WHBGfxShutdown();
     WHBProcShutdown();
