@@ -91,6 +91,12 @@ $env:MSYSTEM = 'MSYS'
 $env:CHERE_INVOKING = '1'
 $dkp = @'
 set -e
+# Restored from the workflow's cache: only MSYS2's own make and cmake are needed (not devkitPro's server).
+if [ -x /opt/devkitpro/portlibs/wiiu/bin/powerpc-eabi-cmake ] && [ -f /etc/profile.d/devkit-env.sh ]; then
+  echo "devkitPro restored from cache"
+  pacman -Sy --noconfirm --needed make cmake
+  exit 0
+fi
 if ! grep -q '^\[dkp-libs\]' /etc/pacman.conf; then
   pacman-key --recv BC26F752D25B92CE272E0F44F7FD5492264BB9D0 --keyserver keyserver.ubuntu.com
   pacman-key --lsign BC26F752D25B92CE272E0F44F7FD5492264BB9D0

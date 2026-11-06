@@ -36,6 +36,16 @@ jobs:
           key: cargo-target-${{ hashFiles('ruffle-wiiu/ruffle/Cargo.lock') }}-${{ github.sha }}
           restore-keys: cargo-target-${{ hashFiles('ruffle-wiiu/ruffle/Cargo.lock') }}-
 
+      # devkitPro's package server often refuses GitHub's machines (HTTP 403), so its tools are kept between
+      # runs; ci-buildtools.ps1 only asks the server when this cache is empty.
+      - name: Cache devkitPro
+        uses: actions/cache@v4
+        with:
+          path: |
+            C:\msys64\opt\devkitpro
+            C:\msys64\etc\profile.d\devkit-env.sh
+          key: devkitpro-wiiu-v1
+
       - name: Install build tools
         shell: pwsh
         run: ./ruffle-wiiu/tools/ci-buildtools.ps1
