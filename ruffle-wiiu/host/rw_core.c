@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <dirent.h>
+#include <strings.h>
 #ifdef _WIN32
 #include <direct.h>
 #else
@@ -555,6 +557,73 @@ static int has_parent_part(const char* p) {
     return 0;
 }
 
+// Games made on Windows or a Mac often ask for "games/triviadeath2/..." when the folder is "TriviaDeath2":
+// their disks ignore letter case, the console's SD card here doesn't. When a path isn't there as written,
+// each part after `base` is looked up ignoring case, and the corrected path replaces it (in place).
+#define CASE_CACHE 64
+static char g_case_from[CASE_CACHE][512], g_case_to[CASE_CACHE][512];
+static int g_case_next, g_case_logged;
+
+static void fix_case(char* path, size_t n, const char* base) {
+    struct stat st;
+    if (stat(path, &st) == 0) return;
+    for (int i = 0; i < CASE_CACHE; i++)
+        if (g_case_from[i][0] && !strcmp(g_case_from[i], path)) {
+            snprintf(path, n, "%s", g_case_to[i]);
+            return;
+        }
+    size_t blen = strlen(base);
+    if (strncmp(path, base, blen) != 0 || path[blen] != '/') return;
+    char fixed[512];
+    snprintf(fixed, sizeof(fixed), "%s", base);
+    const char* rest = path + blen + 1;
+    int changed = 0;
+    while (*rest) {
+        const char* slash = strchr(rest, '/');
+        size_t plen = slash ? (size_t)(slash - rest) : strlen(rest);
+        char part[256];
+        if (plen == 0 || plen >= sizeof(part)) return;
+        memcpy(part, rest, plen);
+        part[plen] = 0;
+        size_t flen = strlen(fixed);
+        if (flen + 1 + plen + 1 > sizeof(fixed)) return;
+        char tryp[512];
+        snprintf(tryp, sizeof(tryp), "%s/%s", fixed, part);
+        if (stat(tryp, &st) != 0) {
+            DIR* d = opendir(fixed);
+            if (!d) break;
+            struct dirent* e;
+            int found = 0;
+            while ((e = readdir(d)) != NULL)
+                if (!strcasecmp(e->d_name, part)) {
+                    snprintf(part, sizeof(part), "%s", e->d_name);
+                    found = changed = 1;
+                    break;
+                }
+            closedir(d);
+            if (!found) break; // (a new file being created: the folders before it are still fixed)
+        }
+        snprintf(fixed + flen, sizeof(fixed) - flen, "/%s", part);
+        rest += plen;
+        if (*rest == '/') rest++;
+    }
+    if (!changed) return;
+    if (*rest) { // the parts that weren't found stay as they were
+        size_t flen = strlen(fixed);
+        snprintf(fixed + flen, sizeof(fixed) - flen, "/%s", rest);
+    }
+    if (g_case_logged < 20) {
+        g_case_logged++;
+        char m[1100];
+        snprintf(m, sizeof(m), "file name case fixed: %s -> %s", path, fixed);
+        plat_log(2, m);
+    }
+    snprintf(g_case_from[g_case_next], sizeof(g_case_from[0]), "%s", path);
+    snprintf(g_case_to[g_case_next], sizeof(g_case_to[0]), "%s", fixed);
+    g_case_next = (g_case_next + 1) % CASE_CACHE;
+    snprintf(path, n, "%s", fixed);
+}
+
 u32 w2c_wasi__snapshot__preview1_path_open(struct w2c_wasi__snapshot__preview1* w, u32 dirfd, u32 dirflags,
                                            u32 path, u32 path_len, u32 oflags, u64 rights, u64 rights_inh,
                                            u32 fdflags, u32 fd_out) {
@@ -579,6 +648,7 @@ u32 w2c_wasi__snapshot__preview1_path_open(struct w2c_wasi__snapshot__preview1* 
     else snprintf(fd->path, sizeof(fd->path), "%s/%s", dir->path, rel);
     size_t plen = strlen(fd->path);
     while (plen > 1 && (fd->path[plen - 1] == '/' || fd->path[plen - 1] == '.')) fd->path[--plen] = 0;
+    fix_case(fd->path, sizeof(fd->path), dir->path);
 
     struct stat st;
     int exists = stat(fd->path, &st) == 0;
@@ -611,6 +681,7 @@ static int host_path(u32 dirfd, u32 path, u32 path_len, char* out, size_t n) {
     snprintf(out, n, "%s/%s", dir->path, rel);
     size_t len = strlen(out);
     while (len > 1 && out[len - 1] == '/') out[--len] = 0;
+    fix_case(out, n, dir->path);
     return 1;
 }
 
