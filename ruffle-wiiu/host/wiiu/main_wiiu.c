@@ -216,6 +216,9 @@ static void present(void) {
 static int g_closing;
 
 static int running(void) {
+    // Once it has said no, WHB has shut ProcUI down: asking again blocks forever (the console then sat on
+    // "Wii U Menu" after HOME > Close Software).
+    if (g_closing) return 0;
     if (WHBProcIsRunning()) return 1;
     g_closing = 1;
     gfx_gx2_gpu_lost();
@@ -2199,8 +2202,11 @@ static void app_main(void) {
         }
         logf_("leaving to the Wii U Menu");
         // Ask for the Wii U Menu, then only let ProcUI run (no drawing: the GPU goes away on the way out).
-        if (WHBProcIsRunning()) SYSLaunchMenu();
-        while (WHBProcIsRunning()) OSSleepTicks(OSMillisecondsToTicks(16));
+        // (Not when the system is already closing the app: it's on its way to the Wii U Menu by itself.)
+        if (running()) {
+            SYSLaunchMenu();
+            while (running()) OSSleepTicks(OSMillisecondsToTicks(16));
+        }
         gfx_gx2_gpu_lost();
         free(canvas);
         gfx_gx2_set_overlay(NULL);
