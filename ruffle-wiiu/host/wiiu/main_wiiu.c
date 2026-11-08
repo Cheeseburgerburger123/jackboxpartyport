@@ -776,6 +776,11 @@ static const KeyMap g_keymap[] = {
     { VPAD_BUTTON_UP, RW_KEY_UP }, { VPAD_BUTTON_DOWN, RW_KEY_DOWN },
     // The right stick is a second d-pad; the left stick moves the mouse, with L and R as its buttons.
     { VPAD_STICK_R_EMULATION_LEFT, RW_KEY_LEFT }, { VPAD_STICK_R_EMULATION_RIGHT, RW_KEY_RIGHT },
+#ifdef RW_DIRECT_GAME
+    // Jackbox: the left stick moves through menus like the d-pad (no mouse cursor).
+    { VPAD_STICK_L_EMULATION_LEFT, RW_KEY_LEFT }, { VPAD_STICK_L_EMULATION_RIGHT, RW_KEY_RIGHT },
+    { VPAD_STICK_L_EMULATION_UP, RW_KEY_UP }, { VPAD_STICK_L_EMULATION_DOWN, RW_KEY_DOWN },
+#endif
     { VPAD_STICK_R_EMULATION_UP, RW_KEY_UP }, { VPAD_STICK_R_EMULATION_DOWN, RW_KEY_DOWN },
 #ifdef RW_DIRECT_GAME
     // Jackbox: A selects (Enter), B goes back (Escape), like its PC keyboard controls.
@@ -1855,8 +1860,12 @@ static int run_game(const char* path, uint8_t* canvas) {
             float cdt = (float)OSTicksToMicroseconds(cnow - cursor_last) / 1000000.0f;
             cursor_last = cnow;
             if (cdt > 0.05f) cdt = 0.05f;
+#ifdef RW_DIRECT_GAME
+            float lx = 0, ly = 0; // (the left stick is the d-pad in this build)
+#else
             float lx = kbd_busy() ? 0 : (script_stick ? script_sx : pads.lx);
             float ly = kbd_busy() ? 0 : (script_stick ? script_sy : pads.ly);
+#endif
             float mag = sqrtf(lx * lx + ly * ly);
             int moved = 0;
             if (mag > 0.18f) {
